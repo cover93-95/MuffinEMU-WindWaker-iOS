@@ -1,6 +1,6 @@
 name: Build MuffinEMU (iOS)
 
-# The private Wind Waker launcher build is dispatched manually as an artifact-only run.
+# The Wind Waker launcher build is dispatched manually as an artifact-only run.
 
 # WHERE A BUILD GOES: THREE CHANNELS, DECIDED ONCE, NEVER INFERRED
 # (details and the reasoning: docs/CI.md; the decision is ci/decide-channel.sh)
