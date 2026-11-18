@@ -26,6 +26,9 @@ struct ContentView: View {
     @State private var showingGameBrowser = true
     @State private var showingFavorites = false
     @State private var sharedImportError: String?
+    /// A library launch requested by the Switch 1 shell. Kept until the initial
+    /// asynchronous library scan has found the requested title.
+    @State private var pendingDeepLinkTitleId: UInt64?
     /// The skin's name, stored so the choice survives relaunch (it used to be @State and reset to Standard).
     /// A name rather than the skin: ControllerSkinLibrary.getSkin(by:) also resolves renamed skins.
     @AppStorage(ControllerSkinStorage.key) private var selectedSkinName = WiiUControllerSkin.standard.name
@@ -41,7 +44,11 @@ struct ContentView: View {
     static let sharedGameExtensions: Set<String> = ["wua", "wud", "wux", "rpx"]
 
     private func openSharedFile(_ url: URL) {
-        guard url.isFileURL, Self.sharedGameExtensions.contains(url.pathExtension.lowercased()) else { return }
+        if !url.isFileURL {
+            openGameDeepLink(url)
+            return
+        }
+        guard Self.sharedGameExtensions.contains(url.pathExtension.lowercased()) else { return }
         if gameManager.emulationState == .idle { showingGameBrowser = true }
         Task {
             do {
@@ -52,6 +59,37 @@ struct ContentView: View {
             // A shared copy lands in Documents/Inbox; once imported it is only clutter in Files.
             if url.path.contains("/Documents/Inbox/") { try? FileManager.default.removeItem(at: url) }
         }
+    }
+
+    /// Handles the private launch contract used by the Switch 1 3D game box:
+    /// `muffinemu://play/<16-digit Wii U title id>`.
+    private func openGameDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "muffinemu",
+              url.host?.lowercased() == "play",
+              let component = url.pathComponents.last,
+              component.count == 16,
+              let titleId = UInt64(component, radix: 16)
+        else { return }
+
+        pendingDeepLinkTitleId = titleId
+        launchPendingDeepLinkIfReady()
+    }
+
+    private func launchPendingDeepLinkIfReady() {
+        guard let titleId = pendingDeepLinkTitleId,
+              gameManager.emulationState == .idle,
+              let game = gameManager.games.first(where: {
+                  $0.titleId.map { cemu_bridge_derive_base_title_id($0) }
+                      == cemu_bridge_derive_base_title_id(titleId)
+              })
+        else { return }
+
+        pendingDeepLinkTitleId = nil
+        onboardingCompleted = true
+        showOnboarding = false
+        selectedGame = game
+        gameManager.launchGame(game)
+        showingGameBrowser = false
     }
 
     var body: some View {
@@ -110,6 +148,11 @@ struct ContentView: View {
         // "Open with MuffinEMU", "Copy to MuffinEMU" from the share sheet, and AirDrop: a Wii U game
         // file is imported exactly as if it had been picked in the library.
         .onOpenURL { url in openSharedFile(url) }
+        // A cold launch can deliver the URL before GameManager's initial scan has
+        // populated `games`; retry exactly when that scan publishes its result.
+        .onReceive(gameManager.$games) { _ in
+            DispatchQueue.main.async { launchPendingDeepLinkIfReady() }
+        }
         // Theme music in the library (Settings > Audio): only while no game is running and the app is on screen.
         .onAppear { MenuMusic.shared.update(emulationState: gameManager.emulationState, appActive: appScenePhase != .background) }
         .onChange(of: gameManager.emulationState) { state in

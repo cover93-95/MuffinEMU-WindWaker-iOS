@@ -30,6 +30,18 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<!-- Private launch contract used by the Switch 1 Wind Waker 3D box. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.kiddreads.MuffinEMU.game-launch</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>muffinemu</string>
+			</array>
+		</dict>
+	</array>
 	<!-- Declares .muffinlyt/.muffinclr as real Uniform Types rather than leaving them as
 	     plain JSON with a custom extension. Same merge mechanism as CFBundleIcons below -
 	     this is a nested structure GENERATE_INFOPLIST_FILE's flat INFOPLIST_KEY_* scheme
